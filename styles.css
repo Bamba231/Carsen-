@@ -1349,7 +1349,7 @@ body {
     overflow: hidden;
 }
 
-.vue-detail.active {
+.vue-detail.actif {
     transform: translateY(0);
 }
 
@@ -1704,7 +1704,7 @@ body {
     transition: all 1s ease-out;
 }
 
-.element-revele.active {
+.element-revele.actif {
     opacity: 1;
     transform: translateY(0);
 }
