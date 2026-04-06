@@ -85,13 +85,13 @@ window.afficherCatalogue = function () {
 };
 
 window.initScrollAnimations = function () {
-    // Les éléments sont maintenant toujours visibles (animations supprimées)
+
 };
 
 document.addEventListener('DOMContentLoaded', () => {
 
     if (window.initScrollAnimations) {
-        // Animations retirées car causant des saccades sur la vue mobile
+
         const elements = document.querySelectorAll('.apparition-defilement, .animation-zoom-doux, .animation-balayage-droite, .animation-balayage-gauche');
         elements.forEach(el => {
             el.style.opacity = '1';
@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fermerModalRecherche();
         });
 
-        // Fermer en cliquant en dehors du conteneur interne
+     
         modalRecherche.addEventListener('click', (e) => {
             if (e.target === modalRecherche) {
                 fermerModalRecherche();
