@@ -11,29 +11,28 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
-const vm = require('vm');
+const os = require('os');
 
-const dbPath = path.join(__dirname, 'database.json');
-const carsDataPath = path.join(__dirname, 'cars-data.js');
+
+let dataDir;
+try {
+    dataDir = path.join(os.homedir(), '.carsen_app_data');
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+    }
+} catch (e) {
+    console.error("Impossible de créer le dossier dans le homedir. Fallback sur le dossier local.", e);
+    dataDir = __dirname;
+}
+
+const dbPath = path.join(dataDir, 'database.json');
 
 if (!fs.existsSync(dbPath)) {
     try {
-        if (fs.existsSync(carsDataPath)) {
-            const carsDataContent = fs.readFileSync(carsDataPath, 'utf8');
-            const sandbox = { window: {} };
-            vm.createContext(sandbox);
-            vm.runInContext(carsDataContent, sandbox);
-            const initialCars = sandbox.window.cars || [];
-            fs.writeFileSync(dbPath, JSON.stringify(initialCars, null, 2));
-            console.log("Database initialized from cars-data.js with", initialCars.length, "cars");
-
-        } else {
-            fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
-            console.log("Database initialized empty");
-        }
+        fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
+        console.log("Database initialized empty");
     } catch (err) {
         console.error("Error initializing DB:", err);
-        fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
     }
 }
 
@@ -51,7 +50,23 @@ const saveCars = (cars) => {
 }
 
 app.get('/api/cars', (req, res) => {
-    res.json(getCars());
+
+    const cars = getCars().map(car => ({
+        ...car,
+        images: car.images && car.images.length > 0 ? [car.images[0]] : []
+    }));
+    res.json(cars);
+});
+
+app.get('/api/cars/:id', (req, res) => {
+    const cars = getCars();
+    const id = parseInt(req.params.id, 10);
+    const car = cars.find(c => c.id === id);
+    if (car) {
+        res.json(car);
+    } else {
+        res.status(404).json({ error: "Car not found" });
+    }
 });
 
 app.post('/api/cars', (req, res) => {
