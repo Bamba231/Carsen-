@@ -6,7 +6,7 @@ document.getElementById('formulaire-connexion-admin').addEventListener('submit',
     e.preventDefault();
     const id = document.getElementById('id-connexion').value;
     const pw = document.getElementById('mdp-connexion').value;
-    if (id === 'a' && pw === 'z') {
+    if (id === 'carsen' && pw === 'Modou2000') {
         document.getElementById('portail-logique').style.opacity = '0';
         setTimeout(() => document.getElementById('portail-logique').style.display = 'none', 300);
         chargerVoitures();
