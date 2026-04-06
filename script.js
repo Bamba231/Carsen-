@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fermerModalRecherche();
         });
 
-     
+
         modalRecherche.addEventListener('click', (e) => {
             if (e.target === modalRecherche) {
                 fermerModalRecherche();
@@ -222,8 +222,20 @@ window.ouvrirVueDetail = function (id) {
 
     if (galerieDetail) {
         galerieDetail.innerHTML = voiture.images.map((img, index) => `
-            <img src="${img}" class="photo-galerie ${index === 0 ? 'active' : ''}" onclick="changerImageDetail(this, '${img}')">
+            <img src="${img}" class="photo-galerie ${index === 0 ? 'actif' : ''}" onclick="changerImageDetail(this, '${img}')">
         `).join('');
+
+        // Fetch full car details asynchronously to populate the rest of the gallery
+        fetch(`/api/cars/${id}`)
+            .then(res => res.json())
+            .then(fullCar => {
+                if (fullCar && fullCar.images) {
+                    galerieDetail.innerHTML = fullCar.images.map((img, index) => `
+                        <img src="${img}" class="photo-galerie ${index === 0 ? 'actif' : ''}" onclick="changerImageDetail(this, '${img}')">
+                    `).join('');
+                }
+            })
+            .catch(err => console.error("Error fetching full car details:", err));
     }
 
     const message = `Bonjour, je suis intéressé par cette voiture: ${voiture.make} ${voiture.model} ${voiture.year} - Prix: ${voiture.price.toLocaleString()} FCFA`;
