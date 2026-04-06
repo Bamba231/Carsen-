@@ -1,4 +1,5 @@
 let idVoitureModification = null;
+let imagesPourModification = null;
 let modeHorsLigne = false;
 let voituresLocales = [];
 
@@ -106,6 +107,21 @@ async function modifierVoiture(id) {
     if (!voiture) return;
 
     idVoitureModification = id;
+    imagesPourModification = voiture.images;
+
+    if (!modeHorsLigne) {
+        try {
+            document.getElementById('btn-soumettre-voiture').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+            document.getElementById('btn-soumettre-voiture').disabled = true;
+            const res = await fetch(`/api/cars/${id}`);
+            if (res.ok) {
+                const fullCar = await res.json();
+                imagesPourModification = fullCar.images;
+            }
+            document.getElementById('btn-soumettre-voiture').disabled = false;
+        } catch (e) { }
+    }
+
     document.getElementById('voiture-marque').value = voiture.make;
     document.getElementById('voiture-modele').value = voiture.model;
     document.getElementById('voiture-annee').value = voiture.year;
@@ -194,11 +210,10 @@ document.getElementById('formulaire-voiture').addEventListener('submit', async (
         };
 
         if (idVoitureModification) {
-            const voitureExistant = voituresLocales.find(c => c.id === idVoitureModification);
             if (b64Images.length > 0) {
                 payload.images = b64Images;
-            } else if (voitureExistant) {
-                payload.images = voitureExistant.images;
+            } else {
+                payload.images = imagesPourModification;
             }
         } else {
             payload.images = b64Images;
