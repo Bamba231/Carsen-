@@ -1,8 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const fs = require('fs');
 const path = require('path');
+const mysql = require('mysql2/promise');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,97 +12,124 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
-const os = require('os');
+const pool = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
 
-
-let dataDir;
-try {
-    dataDir = path.join(os.homedir(), '.carsen_app_data');
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-    }
-} catch (e) {
-    console.error("Impossible de créer le dossier dans le homedir. Fallback sur le dossier local.", e);
-    dataDir = __dirname;
-}
-
-const dbPath = path.join(dataDir, 'database.json');
-
-if (!fs.existsSync(dbPath)) {
+async function initializeDB() {
     try {
-        fs.writeFileSync(dbPath, JSON.stringify([], null, 2));
-        console.log("Database initialized empty");
+        const connection = await pool.getConnection();
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS cars (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                make VARCHAR(255),
+                model VARCHAR(255),
+                year INT,
+                price INT,
+                specs JSON,
+                images LONGTEXT
+            )
+        `);
+        connection.release();
+        console.log("MySQL Database initialized");
     } catch (err) {
-        console.error("Error initializing DB:", err);
+        console.error("Error initializing MySQL DB:", err);
     }
 }
+initializeDB();
 
-const getCars = () => {
+app.get('/api/cars', async (req, res) => {
     try {
-        const data = fs.readFileSync(dbPath, 'utf8');
-        return JSON.parse(data);
+        const [rows] = await pool.query('SELECT * FROM cars');
+        const cars = rows.map(row => {
+            let parsedSpecs = typeof row.specs === 'string' ? JSON.parse(row.specs) : row.specs;
+            let parsedImages = typeof row.images === 'string' ? JSON.parse(row.images) : row.images;
+            return {
+                ...row,
+                specs: parsedSpecs,
+                images: parsedImages && parsedImages.length > 0 ? [parsedImages[0]] : []
+            };
+        });
+        res.json(cars);
     } catch (err) {
-        return [];
-    }
-}
-
-const saveCars = (cars) => {
-    fs.writeFileSync(dbPath, JSON.stringify(cars, null, 2));
-}
-
-app.get('/api/cars', (req, res) => {
-
-    const cars = getCars().map(car => ({
-        ...car,
-        images: car.images && car.images.length > 0 ? [car.images[0]] : []
-    }));
-    res.json(cars);
-});
-
-app.get('/api/cars/:id', (req, res) => {
-    const cars = getCars();
-    const id = parseInt(req.params.id, 10);
-    const car = cars.find(c => c.id === id);
-    if (car) {
-        res.json(car);
-    } else {
-        res.status(404).json({ error: "Car not found" });
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
     }
 });
 
-app.post('/api/cars', (req, res) => {
-    const cars = getCars();
-    const newCar = req.body;
-    const maxId = cars.length > 0 ? Math.max(...cars.map(c => c.id)) : 0;
-    newCar.id = maxId + 1;
-    cars.push(newCar);
-    saveCars(cars);
-    res.json(newCar);
-});
-
-app.put('/api/cars/:id', (req, res) => {
-    const cars = getCars();
-    const id = parseInt(req.params.id, 10);
-    const index = cars.findIndex(c => c.id === id);
-    if (index !== -1) {
-        cars[index] = { ...cars[index], ...req.body, id };
-        saveCars(cars);
-        res.json(cars[index]);
-    } else {
-        res.status(404).json({ error: "Car not found" });
+app.get('/api/cars/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const [rows] = await pool.query('SELECT * FROM cars WHERE id = ?', [id]);
+        if (rows.length > 0) {
+            const row = rows[0];
+            let parsedSpecs = typeof row.specs === 'string' ? JSON.parse(row.specs) : row.specs;
+            let parsedImages = typeof row.images === 'string' ? JSON.parse(row.images) : row.images;
+            res.json({
+                ...row,
+                specs: parsedSpecs,
+                images: parsedImages || []
+            });
+        } else {
+            res.status(404).json({ error: "Car not found" });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
     }
 });
 
-app.delete('/api/cars/:id', (req, res) => {
-    let cars = getCars();
-    const id = parseInt(req.params.id, 10);
-    const initialLen = cars.length;
-    cars = cars.filter(c => c.id !== id);
-    if (cars.length < initialLen) {
-        saveCars(cars);
-        res.json({ success: true });
-    } else {
-        res.status(404).json({ error: "Car not found" });
+app.post('/api/cars', async (req, res) => {
+    try {
+        const { make, model, year, price, specs, images } = req.body;
+        const [result] = await pool.query(
+            'INSERT INTO cars (make, model, year, price, specs, images) VALUES (?, ?, ?, ?, ?, ?)',
+            [make, model, year, price, JSON.stringify(specs), JSON.stringify(images || [])]
+        );
+        res.json({ id: result.insertId, make, model, year, price, specs, images });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+app.put('/api/cars/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const { make, model, year, price, specs, images } = req.body;
+        const [result] = await pool.query(
+            'UPDATE cars SET make=?, model=?, year=?, price=?, specs=?, images=? WHERE id=?',
+            [make, model, year, price, JSON.stringify(specs), JSON.stringify(images || []), id]
+        );
+        if (result.affectedRows > 0) {
+            res.json({ id, ...req.body });
+        } else {
+            res.status(404).json({ error: "Car not found" });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
+    }
+});
+
+app.delete('/api/cars/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        const [result] = await pool.query('DELETE FROM cars WHERE id=?', [id]);
+        if (result.affectedRows > 0) {
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: "Car not found" });
+        }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Database error" });
     }
 });
 
