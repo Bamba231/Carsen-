@@ -59,7 +59,7 @@ app.get('/api/cars', async (req, res) => {
         res.json(cars);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Database error" });
+        res.status(500).json({ error: "Database error: " + err.message });
     }
 });
 
@@ -81,7 +81,7 @@ app.get('/api/cars/:id', async (req, res) => {
         }
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Database error" });
+        res.status(500).json({ error: "Database error: " + err.message });
     }
 });
 
@@ -95,7 +95,7 @@ app.post('/api/cars', async (req, res) => {
         res.json({ id: result.insertId, make, model, year, price, specs, images });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Database error" });
+        res.status(500).json({ error: "Database error: " + err.message });
     }
 });
 
