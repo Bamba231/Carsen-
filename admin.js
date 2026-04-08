@@ -52,18 +52,15 @@ function afficherNotification(msg, isError = false) {
 async function chargerVoitures() {
     try {
         const res = await fetch('/api/cars');
-        if (!res.ok) throw new Error("API FAILED");
+        if (!res.ok) {
+            const errorData = await res.json().catch(()=>({}));
+            throw new Error(errorData.error || "API FAILED");
+        }
         voituresLocales = await res.json();
         modeHorsLigne = false;
     } catch (e) {
-        modeHorsLigne = true;
-        afficherNotification("Hors-ligne (API indisponible)", true);
-        const saved = localStorage.getItem('carsen_data');
-        if (saved) {
-            try { voituresLocales = JSON.parse(saved); } catch (err) { }
-        } else if (window.cars) {
-            voituresLocales = window.cars;
-        }
+        modeHorsLigne = false; 
+        afficherNotification("Erreur de connexion au serveur BDD : " + e.message, true);
     }
 
     const grid = document.getElementById('grille-voitures');
@@ -87,17 +84,13 @@ async function chargerVoitures() {
 
 async function supprimerVoiture(id) {
     if (confirm('Supprimer cette annonce ? Les utilisateurs ne la verront plus.')) {
-        if (!modeHorsLigne) {
-            try {
-                await fetch('/api/cars/' + id, { method: 'DELETE' });
-                afficherNotification("Annonce supprimée");
-                chargerVoitures();
-            } catch (e) { afficherNotification("Erreur API", true); }
-        } else {
-            voituresLocales = voituresLocales.filter(c => c.id !== id);
-            localStorage.setItem('carsen_data', JSON.stringify(voituresLocales));
-            afficherNotification("Supprimé (hors-ligne)");
+        try {
+            const res = await fetch('/api/cars/' + id, { method: 'DELETE' });
+            if (!res.ok) throw new Error("Erreur serveur lors de la suppression");
+            afficherNotification("Annonce supprimée");
             chargerVoitures();
+        } catch (e) { 
+            afficherNotification(e.message, true); 
         }
     }
 }
@@ -219,51 +212,35 @@ document.getElementById('formulaire-voiture').addEventListener('submit', async (
             payload.images = b64Images;
         }
 
-        if (!modeHorsLigne) {
-            let res;
-            if (idVoitureModification) {
-                res = await fetch('/api/cars/' + idVoitureModification, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            } else {
-                res = await fetch('/api/cars', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-            }
-
-            if (res.ok) {
-                afficherNotification(idVoitureModification ? "Annonce modifiée" : "Annonce publiée");
-                document.getElementById('formulaire-voiture').reset();
-                document.getElementById('apercu-telechargement').innerHTML = '';
-                idVoitureModification = null;
-                changerVue('vue-liste');
-                chargerVoitures();
-            }
+        let res;
+        if (idVoitureModification) {
+            res = await fetch('/api/cars/' + idVoitureModification, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
         } else {
-            if (idVoitureModification) {
-                const idx = voituresLocales.findIndex(c => c.id === idVoitureModification);
-                if (idx !== -1) voituresLocales[idx] = { ...voituresLocales[idx], ...payload, id: idVoitureModification };
-            } else {
-                const maxId = voituresLocales.length > 0 ? Math.max(...voituresLocales.map(c => c.id)) : 0;
-                payload.id = maxId + 1;
-                voituresLocales.push({ ...payload });
-            }
-            localStorage.setItem('carsen_data', JSON.stringify(voituresLocales));
-            afficherNotification("Sauvegardé (hors-ligne)");
+            res = await fetch('/api/cars', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }
 
+        if (res.ok) {
+            afficherNotification(idVoitureModification ? "Annonce modifiée" : "Annonce publiée");
             document.getElementById('formulaire-voiture').reset();
             document.getElementById('apercu-telechargement').innerHTML = '';
             idVoitureModification = null;
             changerVue('vue-liste');
             chargerVoitures();
+        } else {
+            const errData = await res.json().catch(()=>({}));
+            throw new Error(errData.error || "Erreur lors de la sauvegarde sur le serveur.");
         }
 
     } catch (err) {
-        afficherNotification("Erreur inconnue", true);
+        afficherNotification(err.message || "Erreur de connexion au serveur", true);
     } finally {
         btn.disabled = false;
         btn.innerHTML = idVoitureModification ? '<i class="fas fa-save"></i> Enregistrer les modifs' : '<i class="fas fa-paper-plane"></i> Publier l\'Annonce';
